@@ -1,0 +1,547 @@
+---
+title: 'R code for "Tidal streams, fish and seabirds: understanding the linkages between
+  mobile predators, prey and hydrodynamics"'
+author: "Ana Couto"
+date: "02/11/2021"
+output: 
+  html_document:
+    theme: flatly
+    highlight: monochrome
+    code_folding: show
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+# Packages used
+
+```{r packages}
+library(mgcv)
+library(mgcViz)
+library(dplyr)
+library(patchwork)
+library(ggplot2)
+library(gratia)
+library(mapdata)
+library(raster)
+```
+
+# Data manipulation
+
+### Load 2016 data
+
+```{r data2016}
+setwd("F:/Scotia/Birds_paper/")
+birds2016 <- read.csv("./data/spatial_birds_2016_turbulence_circular.csv")
+birds2016$year <- 2016
+```
+
+#### Calculating lagged pelagic fish and sandeel presence for 2016
+
+```{r fish2016}
+#Calculate lagged fish and sandeels presence for 2016
+sandeels <- data.frame(matrix(ncol = 3, nrow = 1))
+pelagic_fish <- data.frame(matrix(ncol = 3, nrow = 1))
+survey <- sort(unique(birds2016$survey))
+
+for (r in 1:nrow(birds2016)) {
+  s <- which(survey == birds2016$survey[r])
+  l <- birds2016$loc_id[r]
+  
+  tryCatch( {sandeels[r, 1] <- birds2016$sandeels_presence[which(birds2016$survey == survey[s - 2] & birds2016$loc_id == l)]}, 
+            error = function(e) {})
+  
+  tryCatch({sandeels[r, 2] <- birds2016$sandeels_presence[which(birds2016$survey == survey[s - 1] & birds2016$loc_id == l)]},
+           error = function(e) {})
+  
+  sandeels[r, 3] <- birds2016$sandeels_presence[r]
+  
+  tryCatch({pelagic_fish[r, 1] <- birds2016$fish_presence[which(birds2016$survey == survey[s - 2] & birds2016$loc_id == l)]},
+    error = function(e) {})
+  
+  tryCatch({ pelagic_fish[r, 2] <- birds2016$fish_presence[which(birds2016$survey == survey[s - 1] & birds2016$loc_id == l)]},
+    error = function(e) {})
+  
+  pelagic_fish[r, 3] <- birds2016$fish_presence[r]
+} #close for loop
+
+lag_sandeels <- data.frame(matrix(ncol = 3, nrow = nrow(birds2016)))
+for (r in 1:nrow(lag_sandeels)) {lag_sandeels[r, ] <- seq(-2, 0, 1)}
+
+lag_sandeels <- as.matrix(lag_sandeels)
+
+lag_pelagic_fish <- data.frame(matrix(ncol = 3, nrow = nrow(birds2016)))
+for (r in 1:nrow(lag_pelagic_fish)) {
+  lag_pelagic_fish[r, ] <- seq(-2, 0, 1)
+}
+
+lag_pelagic_fish <- as.matrix(lag_pelagic_fish)
+
+pelagic_fish <- as.matrix(pelagic_fish)
+pelagic_fish[is.na(pelagic_fish)] <- 0
+
+sandeels <- as.matrix(sandeels)
+sandeels[is.na(sandeels)] <- 0
+
+birds2016$lag_pelagic_fish <- lag_pelagic_fish
+birds2016$pelagic_fish <- pelagic_fish
+
+birds2016$lag_sandeels <- lag_sandeels
+birds2016$sandeels <- sandeels
+
+rm(lag_sandeels)
+rm(lag_pelagic_fish)
+rm(sandeels)
+rm(pelagic_fish)
+```
+
+### Load 2018 data
+
+```{r data2018}
+setwd("F:/Scotia/Birds_paper/")
+birds2018 <- read.csv("./data/spatial_birds_2018_turbulence_circular.csv")
+birds2018$year <- 2018
+```
+
+#### Calculating lagged pelagic fish and sandeel presence for 2018
+
+```{r fish2018}
+#Calculate lagged fish and sandeels presence for 2018
+sandeels <- data.frame(matrix(ncol = 3, nrow = 1))
+pelagic_fish <- data.frame(matrix(ncol = 3, nrow = 1))
+survey <- sort(unique(birds2016$survey))
+
+for (r in 1:nrow(birds2018)) {
+  s <- which(survey == birds2018$survey[r])
+  l <- birds2018$loc_id[r]
+  
+  tryCatch( {sandeels[r, 1] <- birds2016$sandeels_presence[which(birds2016$survey == survey[s - 2] & birds2016$loc_id == l)]}, 
+            error = function(e) {})
+  
+  tryCatch({sandeels[r, 2] <- birds2016$sandeels_presence[which(birds2016$survey == survey[s - 1] & birds2016$loc_id == l)]},
+           error = function(e) {})
+  
+  sandeels[r, 3] <- birds2016$sandeels_presence[r]
+  
+  
+  tryCatch({pelagic_fish[r, 1] <- birds2018$fish_presence[which(birds2018$survey == survey[s - 2] & birds2018$loc_id == l)]},
+    error = function(e) {})
+  
+  tryCatch({pelagic_fish[r, 2] <- birds2018$fish_presence[which(birds2018$survey == survey[s - 1] & birds2018$loc_id == l)]},
+    error = function(e) {})
+  
+  pelagic_fish[r, 3] <- birds2018$fish_presence[r]
+} #close for loop
+
+lag_sandeels <- data.frame(matrix(ncol = 3, nrow = nrow(birds2018)))
+
+for (r in 1:nrow(lag_sandeels)) {lag_sandeels[r, ] <- seq(-2, 0, 1)}
+
+lag_sandeels <- as.matrix(lag_sandeels)
+
+lag_pelagic_fish <- data.frame(matrix(ncol = 3, nrow = nrow(birds2018)))
+
+for (r in 1:nrow(lag_pelagic_fish)) {lag_pelagic_fish[r, ] <- seq(-2, 0, 1)}
+
+lag_pelagic_fish <- as.matrix(lag_pelagic_fish)
+
+pelagic_fish <- as.matrix(pelagic_fish)
+pelagic_fish[is.na(pelagic_fish)] <- 0
+
+sandeels <- as.matrix(sandeels)
+sandeels[is.na(sandeels)] <- 0
+
+birds2018$lag_pelagic_fish <- lag_pelagic_fish
+birds2018$pelagic_fish <- pelagic_fish
+
+birds2018$lag_sandeels <- lag_sandeels
+birds2018$sandeels <- sandeels
+```
+
+### Merge 2016 and 2018
+
+```{r merge}
+#Merge datasets and remove NA
+full.data <- rbind(birds2016, birds2018)
+full.data <- full.data[complete.cases(full.data), ]
+
+#Transform section , Transect and year into factor
+full.data$Section <- as.factor(full.data$loc_id)
+full.data$Transect <- as.factor(paste(full.data$survey, full.data$year, sep="_"))
+full.data$year <- as.factor(full.data$year)
+
+# calculate offset
+full.data$offset <- full.data$npoints
+
+#select daytime only for seabirds
+full.data<-full.data[which(full.data$hour %in% seq(4,19,1)),]
+```
+
+# Data visualisation
+
+### Plot mean number of seabirds per section
+
+```{r seabirds}
+a <- ggplot(full.data, aes(x = loc_id, y =  benthic_feeder, group=year))+
+  geom_rect(aes(xmin=23, xmax=24, ymin=-Inf, ymax=Inf), fill="lightgrey",  fill.alpha=0.5,inherit.aes = FALSE)+
+  stat_summary(geom = "errorbar", fun.data = mean_se, alpha = 0.2) +
+  stat_summary(geom = "line", fun = mean,  show.legend = T,aes(group=year, linetype=year), size=1) +
+  geom_vline(xintercept = c(19,36), linetype = 2) +
+  theme_classic() +
+  labs(subtitle = "Benthic", 
+       x = "Section",
+       y = "Mean number of \nseabirds")
+
+b <- ggplot(full.data, aes(x = loc_id, y =  pelagic_feeder, group=year))+ 
+  geom_rect(aes(xmin=23, xmax=24, ymin=-Inf, ymax=Inf), fill="lightgrey",  fill.alpha=0.5,inherit.aes = FALSE)+
+  stat_summary(geom = "errorbar", fun.data = mean_se, alpha = 0.2) +
+  stat_summary(geom = "line", fun = mean,  show.legend = T,aes(group=year, linetype=year), size=1) +
+  geom_vline(xintercept = c(19,36), linetype = 2) +
+  theme_classic() +
+  labs(subtitle = "Pelagic",
+       x = "Section",
+       y = "Mean number of \nseabirds")
+
+c <- ggplot(full.data, aes(x = loc_id, y =  gu, group=year))+ 
+  geom_rect(aes(xmin=23, xmax=24, ymin=-Inf, ymax=Inf), fill="lightgrey",  fill.alpha=0.5,inherit.aes = FALSE)+
+  stat_summary(geom = "errorbar", fun.data = mean_se, alpha = 0.2) +
+  stat_summary(geom = "line", fun = mean,  show.legend = T,aes(group=year, linetype=year), size=1) +
+  geom_vline(xintercept = c(19,36), linetype = 2) +
+  theme_classic() +
+  labs(subtitle = "Common guillemots",
+       x = "Section",
+       y = "Mean number of \nseabirds")
+
+nested_1 <- a + b +c 
+
+seabirds<- nested_1 +
+  plot_layout(ncol = 1) +
+  plot_annotation(tag_levels = "A", tag_suffix = ")")
+
+seabirds
+```
+
+### Plot mean environmental variables per section
+
+```{r env}
+d <- ggplot(full.data, aes(x = loc_id, y =  sandeels_presence, group=year)) +
+  geom_rect(aes(xmin=23, xmax=24, ymin=-Inf, ymax=Inf), fill="lightgrey",  fill.alpha=0.5,inherit.aes = FALSE)+
+  stat_summary(geom = "errorbar", fun.data = mean_se, alpha = 0.2) +
+  stat_summary(geom = "line", fun = mean,  show.legend = T,aes(group=year, linetype=year), size=1) +
+  geom_vline(xintercept = c(19,36), linetype = 2) +
+  theme_classic() +
+  labs(subtitle = "Sandeels", 
+       x = "Section",
+       y = "Mean schools presence")
+
+e <- ggplot(full.data, aes(x = loc_id, y =  fish_presence, group=year)) +
+  geom_rect(aes(xmin=23, xmax=24, ymin=-Inf, ymax=Inf), fill="lightgrey",  fill.alpha=0.5,inherit.aes = FALSE)+
+  stat_summary(geom = "errorbar", fun.data = mean_se, alpha = 0.2) +
+  stat_summary(geom = "line", fun = mean,  show.legend = T,aes(group=year, linetype=year), size=1) +
+  geom_vline(xintercept = c(19,36), linetype = 2) +
+  theme_classic() +
+  labs(subtitle = "Non-sandeels", 
+       x = "Section",
+       y = "Mean school presence")
+
+f <- ggplot(full.data, aes(x = loc_id, y =  velocity, group=year)) +
+  geom_rect(aes(xmin=23, xmax=24, ymin=-Inf, ymax=Inf), fill="lightgrey",  fill.alpha=0.5,inherit.aes = FALSE)+
+  stat_summary(geom = "errorbar", fun.data = mean_se, alpha = 0.2) +
+  stat_summary(geom = "line", fun = mean,  show.legend = T,aes(group=year, linetype=year), size=1) +
+  geom_vline(xintercept = c(19,36), linetype = 2) +
+  theme_classic() +
+  labs(
+    x = "Section",
+    y = "Velocity (m/s)")
+
+g <- ggplot(full.data, aes(x = loc_id, y =  proportion, group=year)) +
+  geom_rect(aes(xmin=23, xmax=24, ymin=-Inf, ymax=Inf), fill="lightgrey",  fill.alpha=0.5,inherit.aes = FALSE)+
+  stat_summary(geom = "errorbar", fun.data = mean_se, alpha = 0.2) +
+  stat_summary(geom = "line", fun = mean,  show.legend = T,aes(group=year, linetype=year), size=1) +
+  geom_vline(xintercept = c(19,36), linetype = 2) +
+  theme_classic() +
+  labs(
+    x = "Section",
+    y = "Turbulence interference \nproportion (%)")
+
+nested_2 <- d + e +f +g
+
+env_variables<- nested_2 +
+  plot_layout(ncol = 2) +
+  plot_annotation(tag_levels = "A", tag_suffix = ")")
+
+env_variables
+#ggsave(file="env_variables_1618.jpg",env_variables, width =20, height = 15, units = "cm") #saves plot
+```
+
+# Statistical models
+
+#### Remove data where turbulence proportion exceeds 10%
+```{r 10%}
+data10<-full.data[which(full.data$proportion<10), ]
+data_rm<-full.data[which(full.data$proportion>=10), ]
+data_rm$n<-1
+summary_rm<-aggregate(cbind(fish_presence, sandeels_presence, n)~ loc_id+year, data_rm, sum)
+
+```
+
+#### GAMM for benthic seabirds
+##### Run the model
+```{r benthic}
+benthic10<-gam(benthic_feeder ~ year+
+                        s(Transect, bs="re") + # random effect 
+                        s(Section, bs="re") + # random effect
+                        s(velocity) +
+                        s(lag_pelagic_fish, by= pelagic_fish, k= 3)+
+                        s(lag_sandeels, by= sandeels, k= 3)+
+                        offset(log(offset)), family= "nb",method= "REML", data= data10, select=T)
+```
+
+##### Model summary
+```{r}
+summary(benthic10)
+```
+
+##### Model appraisal 
+
+```{r}
+appraise(benthic10)
+concurvity(benthic10)
+```
+##### Model figures
+
+
+```{r}
+
+#plot splines
+b10 <- getViz(benthic10)
+
+b1<-plot(sm(b10, select = 3),
+            # To include se with mean
+            seWithMean = TRUE,
+            # 1000 takes me a while to plot
+            nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Velocity", caption = "k = 9, EDF =  0.85") 
+
+b2<-plot(sm(b10, select = 4),
+         # To include se with mean
+         seWithMean = TRUE,
+         # 1000 takes me a while to plot
+         nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+ geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Non-sandeel schools presence", caption = "k = 3, EDF =  0.89") 
+
+
+b3<-plot(sm(b10, select = 5),
+         # To include se with mean
+         seWithMean = TRUE,
+         # 1000 takes me a while to plot
+         nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+ geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Sandeel schools presence",caption = "k = 3, EDF =  0.9") 
+
+#### merge all figures
+nested_benthic<- b1$ggObj + b2$ggObj + b3$ggObj  
+  model_fig_benthic<- nested_benthic + plot_annotation(tag_levels = "A") + plot_layout(ncol = 1)
+model_fig_benthic
+```
+
+##### Run model without random effects
+
+```{r}
+benthic10_no_re<-gam(benthic_feeder ~ year+
+                        s(velocity) +
+                        s(lag_pelagic_fish, by= pelagic_fish, k= 3)+
+                        s(lag_sandeels, by= sandeels, k= 3)+
+                        offset(log(offset)), sp= benthic10$sp[3:8], family= "nb",method= "REML", data= data10, select=T)
+summary(benthic10_no_re)
+```
+
+
+#### GAMM for pelagic seabirds
+##### Run the model
+
+```{r}
+pelagic10<-gam(pelagic_feeder ~ year+
+                 s(Transect, bs="re") + # random effect 
+                 s(Section, bs="re") + # random effect
+                 s(velocity) +
+                 s(lag_pelagic_fish, by= pelagic_fish, k= 3)+
+                 s(lag_sandeels, by= sandeels, k= 3)+
+                 offset(log(offset)), family= "nb",method= "REML", data= data10, select=T)
+```
+
+##### Model summary
+
+```{r}
+summary(pelagic10)
+```
+
+##### Model appraisal
+
+```{r}
+appraise(pelagic10)
+concurvity(pelagic10)
+```
+
+##### Model figures
+
+```{r}
+p10 <- getViz(pelagic10)
+p1<-plot(sm(p10, select = 3),
+         # To include se with mean
+         seWithMean = TRUE,
+         # 1000 takes me a while to plot
+         nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Velocity", caption = "k = 9, EDF = 3.38") 
+
+p2<-plot(sm(p10, select = 4),
+         # To include se with mean
+         seWithMean = TRUE,
+         # 1000 takes me a while to plot
+         nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+ geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Non-sandeel schools presence",caption = "k = 3, EDF =  1.83") 
+
+p3<-plot(sm(p10, select = 5),
+         # To include se with mean
+         seWithMean = TRUE,
+         # 1000 takes me a while to plot
+         nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+ geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Sandeel schools presence",caption = "k = 3, EDF =  0.29") 
+
+#### merge all figures
+nested_pelagic<- p1$ggObj + p2$ggObj + p3$ggObj  
+model_fig_pelagic<- nested_pelagic +plot_annotation(tag_levels = "A") + plot_layout(ncol = 1)
+model_fig_pelagic
+```
+
+##### Run model without random effects
+
+```{r}
+pelagic10_no_re<-gam(pelagic_feeder ~ year+
+                        s(velocity) +
+                        s(lag_pelagic_fish, by= pelagic_fish, k= 3)+
+                        s(lag_sandeels, by= sandeels, k= 3)+
+                        offset(log(offset)), sp= pelagic10$sp[3:8], family= "nb",method= "REML", data= data10, select=T)
+summary(pelagic10_no_re)
+```
+
+#### GAMM for common guillemots
+##### Run the model
+
+```{r}
+guillemots10<-gam(gu ~ year+
+                    s(Transect, bs="re") + # random effect 
+                    s(Section, bs="re") + # random effect
+                    s(velocity) +
+                    s(lag_pelagic_fish, by= pelagic_fish, k= 3)+
+                    s(lag_sandeels, by= sandeels, k= 3)+
+                    offset(log(offset)), family= "nb",method= "REML", data= data10, select=T)
+```
+
+##### Model summary
+
+```{r}
+summary(guillemots10)
+```
+
+##### Model appraisal
+
+```{r}
+appraise(guillemots10)
+```
+
+##### Model figures
+
+```{r}
+g10 <- getViz(guillemots10)
+g1<-plot(sm(g10, select = 3),
+         # To include se with mean
+         seWithMean = TRUE,
+         # 1000 takes me a while to plot
+         nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Velocity", subtitle="Velocity", caption = "k = 9, EDF = 5.6") 
+
+g2<-plot(sm(g10, select = 4),
+         # To include se with mean
+         seWithMean = TRUE,
+         # 1000 takes me a while to plot
+         nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+ geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Non-sandeel schools presence", caption = "k = 3, EDF = 1.94") 
+
+g3<-plot(sm(g10, select = 5),
+         # To include se with mean
+         seWithMean = TRUE,
+         # 1000 takes me a while to plot
+         nsim= 1000)+
+  # generic backtransform code
+  # layer to add in sims
+  l_simLine() +
+  l_fitLine(colour = "black", size = 1) +
+  l_ciPoly(level = 0.95, fill = "orange", alpha = 0.4) +
+  theme_classic()+ geom_hline(yintercept = 0, lty=2) + labs(y = "Effect size", x="Sandeel schools presence",caption = "k = 3, EDF =  1.23") 
+
+#### merge all figures
+nested_guillemots<- g1$ggObj + g2$ggObj + g3$ggObj 
+model_fig_guillemots<- nested_guillemots +plot_annotation(tag_levels = "A") + plot_layout(ncol = 1)
+model_fig_guillemots
+```
+
+##### Run model without random effects
+
+```{r}
+guillemots10_no_re<-gam(gu ~ year+
+                        s(velocity) +
+                        s(lag_pelagic_fish, by= pelagic_fish, k= 3)+
+                        s(lag_sandeels, by= sandeels, k= 3)+
+                        offset(log(offset)), sp= guillemots10$sp[3:8], family= "nb",method= "REML", data= data10, select=T)
+summary(guillemots10_no_re)
+```
+
